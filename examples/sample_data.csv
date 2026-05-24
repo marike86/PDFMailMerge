@@ -1,0 +1,9 @@
+name,email,company,position,salary,start_date
+张三,zhangsan@example.com,百度,软件工程师,25000,2024-03-01
+李四,lisi@example.com,阿里巴巴,产品经理,30000,2024-01-15
+王五,wangwu@example.com,腾讯,前端开发,22000,2024-02-20
+赵六,zhaoliu@example.com,字节跳动,数据分析师,28000,2024-04-10
+孙七,sunqi@example.com,美团,运营专员,18000,2024-05-05
+周八,zhouba@example.com,京东,物流管理,20000,2024-03-25
+吴九,wujiu@example.com,小米,硬件工程师,26000,2024-02-01
+郑十,zhengshi@example.com,华为,网络架构师,35000,2024-01-20
