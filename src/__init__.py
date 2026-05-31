@@ -12,7 +12,7 @@ from .template_engine import parse_template, render_template
 
 __all__ = [
     "load_csv",
-    "load_excel", 
+    "load_excel",
     "load_json",
     "detect_encoding",
     "fill_form_pdf",
