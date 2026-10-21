@@ -7,6 +7,9 @@ import os
 import shutil
 import zipfile
 import hashlib
+import re
+import tempfile
+from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 
@@ -40,6 +43,12 @@ def clean_dir(directory: str) -> bool:
         True if successful
     """
     try:
+        target = Path(directory).resolve()
+        protected = (Path.cwd().resolve(), Path.home().resolve())
+        if target == Path(target.anchor) or target in protected or any(target in p.parents for p in protected):
+            raise ValueError("Refusing to clean a root, home, or working directory")
+        if Path(directory).is_symlink():
+            raise ValueError("Refusing to clean a symbolic link")
         if os.path.exists(directory):
             shutil.rmtree(directory)
         os.makedirs(directory, exist_ok=True)
@@ -153,12 +162,14 @@ def create_zip_archive(
                     for file in files:
                         file_path = os.path.join(root, file)
                         arcname = os.path.relpath(file_path, source_dir)
-                        zipf.write(file_path, arcname)
+                        if Path(file_path).resolve() != Path(output_path).resolve():
+                            zipf.write(file_path, arcname)
             else:
                 for file in os.listdir(source_dir):
                     file_path = os.path.join(source_dir, file)
                     if os.path.isfile(file_path):
-                        zipf.write(file_path, os.path.basename(file_path))
+                        if Path(file_path).resolve() != Path(output_path).resolve():
+                            zipf.write(file_path, os.path.basename(file_path))
 
         return True
 
@@ -182,6 +193,12 @@ def extract_zip_archive(zip_path: str, output_dir: str) -> bool:
         ensure_dir(output_dir)
 
         with zipfile.ZipFile(zip_path, "r") as zipf:
+            root = Path(output_dir).resolve()
+            for name in zipf.namelist():
+                normalized = name.replace("\\", "/")
+                destination = (root / normalized).resolve()
+                if destination != root and root not in destination.parents:
+                    raise ValueError("ZIP entry escapes the destination directory")
             zipf.extractall(output_dir)
 
         return True
@@ -218,10 +235,12 @@ def parse_naming_pattern(
                 safe_value = safe_value.replace("|", "_")
                 filename = filename.replace(placeholder, safe_value)
 
-        if not filename.strip():
+        filename = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", filename).strip().rstrip(". ")
+        if not filename or filename in (".", ".."):
             filename = default
-
-        return filename
+        if re.match(r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)", filename, re.I):
+            filename = "_" + filename
+        return filename[:150].rstrip(". ")
 
     except Exception:
         return default
@@ -246,10 +265,8 @@ def validate_path(path: str, must_exist: bool = True) -> Tuple[bool, str]:
 
     if must_exist and os.path.isdir(path):
         try:
-            test_file = os.path.join(path, ".write_test")
-            with open(test_file, "w") as f:
-                f.write("test")
-            os.remove(test_file)
+            with tempfile.TemporaryFile(dir=path):
+                pass
         except Exception:
             return False, f"Directory is not writable: {path}"
 

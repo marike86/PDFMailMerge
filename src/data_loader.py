@@ -44,12 +44,14 @@ def detect_encoding(file_path: str) -> str:
 
             if encoding:
                 encoding = encoding.lower()
-                if "gb" in encoding or "gbk" in encoding:
+                if "gb18030" in encoding:
+                    return "gb18030"
+                elif "gb" in encoding or "gbk" in encoding:
                     return "gbk"
                 elif "utf-8" in encoding or "utf8" in encoding:
                     return "utf-8"
-                elif "gb18030" in encoding:
-                    return "gb18030"
+                elif encoding in ("utf-16", "utf-32", "ascii"):
+                    return encoding
 
             return "utf-8"
 
@@ -78,16 +80,18 @@ def load_csv(file_path: str, encoding: Optional[str] = None, **kwargs) -> pd.Dat
     if encoding is None:
         encoding = detect_encoding(file_path)
 
+    kwargs.setdefault("dtype", str)
+    kwargs.setdefault("keep_default_na", False)
     try:
         df = pd.read_csv(file_path, encoding=encoding, **kwargs)
         return df
     except UnicodeDecodeError:
-        encodings = ["utf-8", "gbk", "gb18030", "latin1"]
+        encodings = ["utf-8-sig", "gb18030", "utf-16"]
         for enc in encodings:
             try:
                 df = pd.read_csv(file_path, encoding=enc, **kwargs)
                 return df
-            except Exception:
+            except (UnicodeError, pd.errors.ParserError):
                 continue
         raise DataLoadError("Failed to load CSV with supported encodings")
     except Exception as e:
@@ -115,9 +119,10 @@ def load_excel(
         raise DataLoadError(f"Excel file not found: {file_path}")
 
     try:
-        df = pd.read_excel(
-            file_path, sheet_name=sheet_name, engine="openpyxl", **kwargs
-        )
+        kwargs.setdefault("dtype", str)
+        kwargs.setdefault("keep_default_na", False)
+        engine = kwargs.pop("engine", "xlrd" if str(file_path).lower().endswith(".xls") else "openpyxl")
+        df = pd.read_excel(file_path, sheet_name=sheet_name, engine=engine, **kwargs)
         return df
     except Exception as e:
         raise DataLoadError(f"Error loading Excel: {str(e)}")
@@ -241,7 +246,7 @@ def data_to_dict_list(df: pd.DataFrame) -> List[Dict]:
     Returns:
         List of dictionaries, one per row
     """
-    return df.to_dict(orient="records")
+    return df.astype(object).where(pd.notna(df), "").to_dict(orient="records")
 
 
 def get_field_names(df: pd.DataFrame) -> List[str]:
