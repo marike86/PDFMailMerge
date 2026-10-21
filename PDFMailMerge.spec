@@ -1,5 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Unpack-and-run distribution: shared Qt DLLs remain replaceable.
+import os
+import sys
+from pathlib import Path
+
+if sys.platform == 'win32':
+    # Keep unrelated tools (for example Poppler's ICU) out of native dependency
+    # resolution. Qt's Windows ICU imports require the Windows system library.
+    os.environ['PATH'] = os.pathsep.join([
+        sys.base_prefix, str(Path(sys.base_prefix) / 'DLLs'),
+        str(Path(os.environ['WINDIR']) / 'System32'),
+    ])
+
 a = Analysis(
     ['main.py'],
     pathex=[SPECPATH],

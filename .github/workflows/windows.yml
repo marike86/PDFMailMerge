@@ -30,6 +30,9 @@ jobs:
       - name: Smoke test frozen desktop
         shell: pwsh
         run: |
+          $env:PATH = "$env:WINDIR\System32"
+          $env:PYTHONHOME = ''
+          $env:PYTHONPATH = ''
           & ./dist/PDFMailMerge/PDFMailMerge-CLI.exe --self-test ./dist/smoke-test
           if ($LASTEXITCODE -ne 0) { throw 'Frozen desktop smoke test failed' }
       - uses: actions/upload-artifact@v4

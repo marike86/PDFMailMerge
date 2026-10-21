@@ -7,6 +7,7 @@ Validated on Windows x64 with Python 3.14, using the versions in `requirements-l
 - Source desktop offline self-test: imports the bundled template and CSV, previews record 1, generates 3 PDFs and ZIP, writes screenshots and JSON.
 - Form verification checks canonical `/AcroForm/Fields` values, page widget values, appearance streams and rendered/extracted Chinese text, including multiple pages and checkboxes.
 - PDF appearance was visually inspected using Poppler-rendered PNGs and the application's preview.
+- The portable smoke test clears Python paths and uses only the Windows system PATH. Build dependency discovery also excludes unrelated application PATH entries, preventing ICU DLL conflicts from other installed tools.
 
 ## Run tests
 
