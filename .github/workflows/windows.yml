@@ -1,0 +1,42 @@
+name: Windows desktop and portable
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-and-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+      - name: Install tested dependencies
+        run: |
+          python -m pip install -r requirements-lock.txt
+          python -m pip install -r requirements-dev.txt
+      - name: Check source
+        run: python -m ruff check src main.py scripts tests/test_gui.py tests/test_regressions.py --select F
+      - name: Run regression suite
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pytest -q
+      - name: Build portable archive
+        shell: pwsh
+        run: ./build.ps1
+      - name: Smoke test frozen desktop
+        shell: pwsh
+        run: |
+          & ./dist/PDFMailMerge/PDFMailMerge-CLI.exe --self-test ./dist/smoke-test
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen desktop smoke test failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PDFMailMerge-windows-x64-portable
+          path: |
+            dist/*portable.zip
+            dist/*source.zip
+            dist/smoke-test/self-test.json
+            dist/smoke-test/desktop-*.png

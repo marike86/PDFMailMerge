@@ -9,22 +9,9 @@ import argparse
 import time
 from typing import List, Optional
 
-from .data_loader import load_data, data_to_dict_list
-from .pdf_processor import (
-    fill_form_pdf,
-    replace_text,
-    get_form_field_names,
-    detect_text_placeholders,
-)
-from .template_engine import validate_template_fields
 from .utils import (
-    ensure_dir,
-    clean_dir,
-    parse_naming_pattern,
     print_progress,
     format_duration,
-    create_zip_archive,
-    get_timestamp,
 )
 
 
@@ -105,162 +92,48 @@ Examples:
             help="Only validate template and data without generating PDFs",
         )
 
+        parser.add_argument("--mapping", help="Comma-separated template_field=data_column pairs")
+
         return parser
 
     def run(self, args: Optional[List[str]] = None) -> int:
-        """
-        Run CLI with provided arguments.
-
-        Args:
-            args: Command-line arguments (default: sys.argv[1:])
-
-        Returns:
-            Exit code (0 for success, 1 for error)
-        """
+        """Validate before touching output; run the shared desktop/CLI pipeline."""
+        from .merge_service import inspect_inputs, validate_mapping, run_merge
         try:
-            parsed_args = self.parser.parse_args(args)
-
-            if parsed_args.verbose:
+            options = self.parser.parse_args(args)
+            if options.verbose:
                 print("PDF Mail Merge Tool")
-                print("=" * 50)
-
-            start_time = time.time()
-
-            if parsed_args.clean:
-                print(f"Cleaning output directory: {parsed_args.output}")
-                clean_dir(parsed_args.output)
-
-            ensure_dir(parsed_args.output)
-
-            if parsed_args.verbose:
-                print(f"Loading data from: {parsed_args.data}")
-
-            df = load_data(parsed_args.data)
-
-            if parsed_args.verbose:
-                print(f"Loaded {len(df)} records")
-
-            mode = parsed_args.mode
-
-            if mode == "auto":
-                form_fields = get_form_field_names(parsed_args.template)
-                text_placeholders = detect_text_placeholders(parsed_args.template)
-
-                if form_fields:
-                    mode = "form"
-                elif text_placeholders:
-                    mode = "text"
-                else:
-                    print("Error: No form fields or text placeholders detected in PDF")
-                    return 1
-
-                if parsed_args.verbose:
-                    print(f"Auto-detected mode: {mode}")
-
-            if parsed_args.verbose:
-                print(f"Processing mode: {mode}")
-
-            if mode == "form":
-                template_fields = get_form_field_names(parsed_args.template)
-            else:
-                template_fields = detect_text_placeholders(parsed_args.template)
-
-            if parsed_args.verbose:
-                print(f"Template fields: {', '.join(template_fields)}")
-                print(f"Data fields: {', '.join(df.columns.tolist())}")
-
-            validation = validate_template_fields(template_fields, df.columns.tolist())
-
-            if not validation["valid"]:
-                print("\nField mapping issues:")
-                if validation["unmatched_template"]:
-                    print(
-                        f"  Template fields without data: {', '.join(validation['unmatched_template'])}"
-                    )
-                if validation["unmatched_data"]:
-                    print(
-                        f"  Data fields not in template: {', '.join(validation['unmatched_data'])}"
-                    )
-
-                response = input("\nContinue anyway? (y/n): ").lower().strip()
-                if response != "y":
-                    print("Cancelled by user")
-                    return 1
-
-            if parsed_args.validate_only:
-                print("\nValidation passed!")
+            started = time.time()
+            mapping = {}
+            for pair in (options.mapping or "").split(","):
+                if pair:
+                    if "=" not in pair:
+                        raise ValueError("Mapping must use template_field=data_column")
+                    key, column = pair.split("=", 1)
+                    mapping[key.strip()] = column.strip()
+            plan = inspect_inputs(options.template, options.data, options.mode, mapping)
+            validate_mapping(plan)
+            if options.validate_only:
+                print("Validation passed!")
                 return 0
-
-            print("\nGenerating PDFs...")
-            print(f"Output directory: {parsed_args.output}")
-
-            records = data_to_dict_list(df)
-            success_count = 0
-            error_count = 0
-
-            for idx, record in enumerate(records, 1):
-                try:
-                    row_output_dir = parsed_args.output
-                    ensure_dir(row_output_dir)
-
-                    filename = (
-                        parse_naming_pattern(
-                            parsed_args.name,
-                            {**record, "row": idx},
-                            default=f"document_{idx}",
-                        )
-                        + ".pdf"
-                    )
-
-                    output_path = os.path.join(row_output_dir, filename)
-
-                    if mode == "form":
-                        fill_form_pdf(parsed_args.template, record, output_path)
-                    else:
-                        replacements = {
-                            key: str(record.get(key, "")) for key in template_fields
-                        }
-                        replace_text(parsed_args.template, replacements, output_path)
-
-                    success_count += 1
-
-                    if parsed_args.verbose or (idx % 10 == 0):
-                        print_progress(idx, len(records), prefix="Progress:")
-
-                except Exception as e:
-                    error_count += 1
-                    if parsed_args.verbose:
-                        print(f"\nError processing record {idx}: {e}")
-
-            print(f"\n{'=' * 50}")
-            print("Completed!")
-            print(f"  Total records: {len(records)}")
-            print(f"  Successful: {success_count}")
-            print(f"  Errors: {error_count}")
-            print(f"  Time: {format_duration(time.time() - start_time)}")
-            print(f"  Output: {os.path.abspath(parsed_args.output)}")
-
-            if parsed_args.zip and success_count > 0:
-                zip_name = f"pdf_mail_merge_{get_timestamp()}.zip"
-                zip_path = os.path.join(os.path.dirname(parsed_args.output), zip_name)
-
-                print("\nCreating ZIP archive...")
-                if create_zip_archive(parsed_args.output, zip_path):
-                    print(f"  Archive: {zip_path}")
-                else:
-                    print("  Warning: Failed to create ZIP archive")
-
-            return 0 if error_count == 0 else 1
-
+            result = run_merge(
+                plan, options.output, options.name, options.zip,
+                progress=lambda current, total, message: print_progress(current, total, prefix="Progress:"),
+                clean=options.clean, data_path=options.data,
+            )
+            print(f"\nCompleted! Successful: {len(result.files)}; Errors: {len(result.errors)}")
+            print(f"Time: {format_duration(time.time() - started)}")
+            print(f"Output: {os.path.abspath(options.output)}")
+            for error in result.errors:
+                print(error)
+            if result.archive:
+                print(f"Archive: {result.archive}")
+            return 1 if result.errors or result.cancelled else 0
         except KeyboardInterrupt:
-            print("\n\nInterrupted by user")
+            print("\nInterrupted by user")
             return 130
-        except Exception as e:
-            print(f"\nError: {e}")
-            if parsed_args.verbose if "parsed_args" in locals() else False:
-                import traceback
-
-                traceback.print_exc()
+        except Exception as exc:
+            print(f"Error: {exc}")
             return 1
 
 

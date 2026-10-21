@@ -1,0 +1,16 @@
+# Windows x64 runtime versions used to build and verify v2.0.
+chardet==7.7.0
+et_xmlfile==2.0.0
+Jinja2==3.1.6
+MarkupSafe==3.0.4
+numpy==2.5.4
+openpyxl==3.1.5
+pandas==3.0.6
+pymupdf==1.28.2
+pypdf==6.21.1
+PySide6_Essentials==6.12.0
+python-dateutil==2.9.0.post0
+shiboken6==6.12.0
+six==1.17.0
+tzdata==2026.5
+xlrd==2.0.2

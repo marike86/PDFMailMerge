@@ -93,7 +93,7 @@ def detect_template_fields(text: str) -> List[str]:
     Returns:
         List of unique field names found
     """
-    pattern = r"\{\{(\w+)\}\}"
+    pattern = r"\{\{\s*(\w+)\s*\}\}"
     matches = re.findall(pattern, text)
     return sorted(list(set(matches)))
 

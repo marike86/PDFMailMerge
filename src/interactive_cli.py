@@ -544,150 +544,24 @@ class InteractiveCLI:
                 self.print_warning("请输入 Y (确认) 或 N (取消)")
 
     def step_process(self) -> bool:
-        """执行处理"""
-        from .pdf_processor import (
-            fill_form_pdf,
-            replace_text,
-            get_form_field_names,
-            detect_text_placeholders,
-        )
-        from .data_loader import load_data, data_to_dict_list
-        from .utils import (
-            ensure_dir,
-            clean_dir,
-            parse_naming_pattern,
-            create_zip_archive,
-            get_timestamp,
-            format_duration,
-        )
-
+        """Use the same validation and output rules as the desktop."""
+        from .merge_service import inspect_inputs, run_merge
         self.print_section("正在处理...")
-
-        start_time = time.time()
-
-        # 清空输出目录
-        if self.config["clean_output"]:
-            print(f"清空输出目录: {self.config['output_dir']}")
-            clean_dir(self.config["output_dir"])
-
-        # 创建输出目录
-        ensure_dir(self.config["output_dir"])
-
-        # 加载数据
-        print(f"\n加载数据: {self.config['data_path']}")
-        df = load_data(self.config["data_path"])
-        records = data_to_dict_list(df)
-        print(f"加载了 {len(records)} 条数据")
-
-        # 确定处理模式
-        mode = self.config["mode"]
-
-        if mode == "auto":
-            form_fields = get_form_field_names(self.config["template_path"])
-            text_placeholders = detect_text_placeholders(self.config["template_path"])
-
-            if form_fields:
-                mode = "form"
-                print(f"自动检测为: 表单模式 (发现 {len(form_fields)} 个表单域)")
-            elif text_placeholders:
-                mode = "text"
-                print(
-                    f"自动检测为: 文本替换模式 (发现 {len(text_placeholders)} 个占位符)"
-                )
-            else:
-                self.print_error("无法自动检测PDF类型，请手动选择模式")
-                return False
-
-        # 获取模板字段
-        if mode == "form":
-            template_fields = get_form_field_names(self.config["template_path"])
-        else:
-            template_fields = detect_text_placeholders(self.config["template_path"])
-
-        print("\n开始生成PDF文件...")
-        print(f"模式: {mode}")
-        print(f"输出目录: {self.config['output_dir']}\n")
-
-        success_count = 0
-        error_count = 0
-
         try:
-            for idx, record in enumerate(records, 1):
-                try:
-                    filename = (
-                        parse_naming_pattern(
-                            self.config["naming_pattern"],
-                            {**record, "row": idx},
-                            default=f"document_{idx}",
-                        )
-                        + ".pdf"
-                    )
-
-                    output_path = os.path.join(self.config["output_dir"], filename)
-
-                    if mode == "form":
-                        fill_form_pdf(self.config["template_path"], record, output_path)
-                    else:
-                        replacements = {
-                            key: str(record.get(key, "")) for key in template_fields
-                        }
-                        replace_text(
-                            self.config["template_path"], replacements, output_path
-                        )
-
-                    success_count += 1
-
-                    # 显示进度
-                    progress = int(100 * idx / len(records))
-                    bar_len = 30
-                    filled = int(bar_len * idx / len(records))
-                    bar = "=" * filled + "-" * (bar_len - filled)
-                    print(
-                        f"\r  进度: [{bar}] {progress}% ({idx}/{len(records)})",
-                        end="",
-                        flush=True,
-                    )
-
-                except Exception as e:
-                    error_count += 1
-                    print(
-                        f"\n  {self.COLORS['yellow']}警告: 处理第 {idx} 条数据时出错: {e}{self.COLORS['reset']}"
-                    )
-
-            print()  # 换行
-
-        except KeyboardInterrupt:
-            print(f"\n\n{self.COLORS['yellow']}用户中断处理{self.COLORS['reset']}")
-            print(f"已处理: {success_count} 条")
-            print(f"跳过: {error_count} 条")
-            return False
-
-        # 生成ZIP
-        if self.config["zip_enabled"] and success_count > 0:
-            print("\n生成ZIP压缩包...")
-            zip_name = f"pdf_mail_merge_{get_timestamp()}.zip"
-            zip_path = os.path.join(
-                os.path.dirname(self.config["output_dir"]) or ".", zip_name
+            plan = inspect_inputs(self.config["template_path"], self.config["data_path"], self.config["mode"])
+            result = run_merge(
+                plan, self.config["output_dir"], self.config["naming_pattern"],
+                zip_enabled=self.config["zip_enabled"], clean=self.config["clean_output"],
+                data_path=self.config["data_path"],
+                progress=lambda current, total, message: print(f"{current}/{total}  {message}"),
             )
-
-            if create_zip_archive(self.config["output_dir"], zip_path):
-                self.print_success(f"ZIP文件已生成: {zip_path}")
-            else:
-                self.print_warning("ZIP文件生成失败")
-
-        # 显示结果
-        elapsed = time.time() - start_time
-
-        print(f"\n{self.COLORS['green']}{'─' * 60}")
-        print("处理完成!")
-        print(f"{'─' * 60}{self.COLORS['reset']}")
-        print(f"  总数据: {len(records)} 条")
-        print(f"  成功: {self.COLORS['green']}{success_count}{self.COLORS['reset']} 条")
-        print(f"  失败: {self.COLORS['red']}{error_count}{self.COLORS['reset']} 条")
-        print(f"  用时: {format_duration(elapsed)}")
-        print(f"  输出: {os.path.abspath(self.config['output_dir'])}")
-
-        return True
+            print(f"处理完成: 成功 {len(result.files)}，失败 {len(result.errors)}")
+            for error in result.errors:
+                self.print_error(error)
+            return not result.errors and not result.cancelled
+        except (Exception, KeyboardInterrupt) as exc:
+            self.print_error(str(exc))
+            return False
 
     def run_interactive(self):
         """运行交互式对话"""

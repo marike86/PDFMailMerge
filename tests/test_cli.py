@@ -170,13 +170,12 @@ class TestMailMergeCLIRun:
 
     def test_zip_creation(self, cli, cli_text_pdf, cli_csv, tmp_path):
         output = str(tmp_path / "output")
-        parent = str(tmp_path)
         result = cli.run([
             "-t", cli_text_pdf, "-d", cli_csv, "-o", output,
             "-m", "text", "--zip"
         ])
         assert result == 0
-        zip_files = [f for f in os.listdir(parent) if f.endswith(".zip")]
+        zip_files = [f for f in os.listdir(output) if f.endswith(".zip")]
         assert len(zip_files) > 0
 
     def test_keyboard_interrupt(self, cli):

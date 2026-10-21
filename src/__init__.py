@@ -3,7 +3,7 @@ PDF Mail Merge Tool
 A powerful tool for batch generating personalized PDFs from templates and data sources.
 """
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 __author__ = "PDF Mail Merge Team"
 
 from .data_loader import load_csv, load_excel, load_json, detect_encoding
