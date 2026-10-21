@@ -8,6 +8,7 @@ Validated on Windows x64 with Python 3.14, using the versions in `requirements-l
 - Form verification checks canonical `/AcroForm/Fields` values, page widget values, appearance streams and rendered/extracted Chinese text, including multiple pages and checkboxes.
 - PDF appearance was visually inspected using Poppler-rendered PNGs and the application's preview.
 - The portable smoke test clears Python paths and uses only the Windows system PATH. Build dependency discovery also excludes unrelated application PATH entries, preventing ICU DLL conflicts from other installed tools.
+- The Windows portable self-test uses the native Windows Qt platform by default. The workflow requires an explicit success report, not just a zero process exit code. Set `QT_QPA_PLATFORM=offscreen` when explicitly testing Qt's headless platform.
 
 ## Run tests
 

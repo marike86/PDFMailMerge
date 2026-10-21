@@ -35,6 +35,8 @@ jobs:
           $env:PYTHONPATH = ''
           & ./dist/PDFMailMerge/PDFMailMerge-CLI.exe --self-test ./dist/smoke-test
           if ($LASTEXITCODE -ne 0) { throw 'Frozen desktop smoke test failed' }
+          $report = Get-Content ./dist/smoke-test/self-test.json -Raw | ConvertFrom-Json
+          if (-not $report.passed) { throw 'Frozen desktop did not complete its self-test' }
       - uses: actions/upload-artifact@v4
         with:
           name: PDFMailMerge-windows-x64-portable

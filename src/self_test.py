@@ -9,7 +9,7 @@ from pathlib import Path
 def main(args):
     if len(args) != 1:
         raise SystemExit("Usage: PDFMailMerge-CLI.exe --self-test OUTPUT_DIRECTORY")
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ.setdefault("QT_QPA_PLATFORM", "windows" if sys.platform == "win32" else "offscreen")
     from PySide6.QtCore import QTimer
     from PySide6.QtWidgets import QApplication
     from .gui import MainWindow, configure_app
@@ -17,6 +17,7 @@ def main(args):
     output.mkdir(parents=True, exist_ok=True)
     root = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[1]
     app = QApplication.instance() or QApplication([])
+    app.setQuitOnLastWindowClosed(False)
     configure_app(app)
     window = MainWindow()
     window.show()
@@ -72,4 +73,13 @@ def main(args):
 
     window.inspect()
     QTimer.singleShot(30, tick)
-    return app.exec()
+    exit_code = app.exec()
+    if not state["passed"]:
+        # A successful process exit alone is not evidence of a completed test.
+        window.cancel.set()
+        if window.worker:
+            window.worker.wait(10000)
+        state["error"] = state.get("error") or "Application exited before the self-test completed"
+        (output / "self-test.json").write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+        return exit_code or 1
+    return exit_code
